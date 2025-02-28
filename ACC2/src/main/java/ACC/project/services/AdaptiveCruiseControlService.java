@@ -17,10 +17,10 @@ public class AdaptiveCruiseControlService {
     private AdaptiveCruiseControl accSystem = new AdaptiveCruiseControl(5.00f);
     private Vehicle egoVehicle = new Vehicle();
     private boolean isAdjusting = false;
+    private boolean isRainSimulation = false; // Neue Variable für Regensimulation
     private static final float MIN_DISTANCE = 6.0f;
     private static final float MAX_DISTANCE = 8.0f;
-    private static final float RAIN_MIN_DISTANCE = 15.0f; // Neuer Mindestabstand bei Regen
-    private static final float RAIN_MAX_DISTANCE = 18.0f; // Neuer Maximaler Zielabstand bei Regen
+    private static final float RAIN_DISTANCE = 10.0f; // Zielabstand bei Regen
 
     public AdaptiveCruiseControlService() {
         egoVehicle.setSpeed(0.0f);
@@ -30,6 +30,7 @@ public class AdaptiveCruiseControlService {
         egoVehicle.setSpeed(100.0f);
         sensors.reset();
         isAdjusting = false;
+        isRainSimulation = false; // Regen wird zurückgesetzt
         accSystem = new AdaptiveCruiseControl(0.0f);
         actuators.applyThrottle(0.0f);
         actuators.applyBrakes(0.0f);
@@ -60,15 +61,15 @@ public class AdaptiveCruiseControlService {
                 egoVehicle.brake(brake);
                 actuators.applyBrakes(brakeFactor);
             }
-        } else if (sensors.isWeatherActive() && "Rain".equals(sensors.getCurrentWeatherCondition())) {
-            // Regenlogik: Abstand auf 15–18 Meter anpassen
-            if (distance > RAIN_MAX_DISTANCE && egoSpeed < 180.0f) {
-                float throttleFactor = Math.min(10.0f, (distance - RAIN_MAX_DISTANCE) * 3.0f);
+        } else if (isRainSimulation) {
+            // Regenlogik: Abstand auf 10 Meter anpassen
+            if (distance > RAIN_DISTANCE && egoSpeed < 180.0f) {
+                float throttleFactor = Math.min(10.0f, (distance - RAIN_DISTANCE) * 3.0f);
                 float throttle = throttleFactor * deltaTime;
                 egoVehicle.accelerate(throttle);
                 actuators.applyThrottle(throttleFactor);
-            } else if (distance <= RAIN_MAX_DISTANCE && distance > RAIN_MIN_DISTANCE) {
-                // Konstante Geschwindigkeit im Zielbereich 15–18 Meter
+            } else if (distance <= RAIN_DISTANCE && distance > RAIN_DISTANCE - 1.0f) {
+                // Konstante Geschwindigkeit im Zielbereich 9–10 Meter
                 float speedDifference = leadVehicleSpeed - egoSpeed;
                 if (speedDifference > 0 && egoSpeed < 180.0f) {
                     float throttle = speedDifference * deltaTime * 3.0f;
@@ -79,8 +80,32 @@ public class AdaptiveCruiseControlService {
                     egoVehicle.brake(brake);
                     actuators.applyBrakes(-speedDifference);
                 }
-            } else if (distance <= RAIN_MIN_DISTANCE && egoSpeed > 0) {
-                float brakeFactor = Math.min(10.0f, (RAIN_MIN_DISTANCE - distance) * 20.0f);
+            } else if (distance <= RAIN_DISTANCE - 1.0f && egoSpeed > 0) {
+                float brakeFactor = Math.min(10.0f, (RAIN_DISTANCE - distance) * 20.0f);
+                float brake = brakeFactor * deltaTime;
+                egoVehicle.brake(brake);
+                actuators.applyBrakes(brakeFactor);
+            }
+        } else if (sensors.isWeatherActive() && "Rain".equals(sensors.getCurrentWeatherCondition())) {
+            // Alte Regenlogik für Wetter an/aus bleibt erhalten
+            if (distance > 18.0f && egoSpeed < 180.0f) {
+                float throttleFactor = Math.min(10.0f, (distance - 18.0f) * 3.0f);
+                float throttle = throttleFactor * deltaTime;
+                egoVehicle.accelerate(throttle);
+                actuators.applyThrottle(throttleFactor);
+            } else if (distance <= 18.0f && distance > 15.0f) {
+                float speedDifference = leadVehicleSpeed - egoSpeed;
+                if (speedDifference > 0 && egoSpeed < 180.0f) {
+                    float throttle = speedDifference * deltaTime * 3.0f;
+                    egoVehicle.accelerate(throttle);
+                    actuators.applyThrottle(speedDifference);
+                } else if (speedDifference < 0 && egoSpeed > 0) {
+                    float brake = -speedDifference * deltaTime * 3.0f;
+                    egoVehicle.brake(brake);
+                    actuators.applyBrakes(-speedDifference);
+                }
+            } else if (distance <= 15.0f && egoSpeed > 0) {
+                float brakeFactor = Math.min(10.0f, (15.0f - distance) * 20.0f);
                 float brake = brakeFactor * deltaTime;
                 egoVehicle.brake(brake);
                 actuators.applyBrakes(brakeFactor);
@@ -139,6 +164,11 @@ public class AdaptiveCruiseControlService {
         String action = distance < MIN_DISTANCE ? "Bremsen betätigt" :
                 distance > MAX_DISTANCE ? "Gas betätigt" : "Abstand stabil gehalten";
         return new AdjustmentResult(egoSpeed, leadSpeed, distance, action);
+    }
+
+    public void toggleRain(boolean rain) { // Neue Methode für Regen-Simulation
+        isRainSimulation = rain;
+        isAdjusting = true; // Aktiviere Anpassung
     }
 
     public float getEgoSpeed() {
