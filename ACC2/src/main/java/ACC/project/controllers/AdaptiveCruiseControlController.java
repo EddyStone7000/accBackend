@@ -41,16 +41,16 @@ public class AdaptiveCruiseControlController {
 
     @GetMapping("/stop")
     public SimulationData stopAndReset() {
-        accService.reset(); // Vollständiger Reset
+        accService.reset();
         return new SimulationData(
-                accService.getEgoSpeed(),              // 0.0
-                accService.getSensors().getSpeedOfLeadVehicle(), // 0.0
-                accService.getSensors().getDistanceToVehicle(), // 0.0
-                accService.getSensors().getCurrentWeatherCondition(), // "Clear"
-                accService.getSensors().getCurrentTemperature(), // 0.0
-                accService.getSensors().getCurrentWindSpeed(), // 0.0
-                accService.getSensors().getCity(),      // "Berlin"
-                accService.getSensors().getCurrentWeatherIcon() // "01d"
+                accService.getEgoSpeed(),
+                accService.getSensors().getSpeedOfLeadVehicle(),
+                accService.getSensors().getDistanceToVehicle(),
+                accService.getSensors().getCurrentWeatherCondition(),
+                accService.getSensors().getCurrentTemperature(),
+                accService.getSensors().getCurrentWindSpeed(),
+                accService.getSensors().getCity(),
+                accService.getSensors().getCurrentWeatherIcon()
         );
     }
 
@@ -75,6 +75,21 @@ public class AdaptiveCruiseControlController {
     @GetMapping("/weatherToggle")
     public SimulationData toggleWeather(@RequestParam boolean active) {
         sensors.toggleWeather(active);
+        return new SimulationData(
+                accService.getEgoSpeed(),
+                accService.getSensors().getSpeedOfLeadVehicle(),
+                accService.getSensors().getDistanceToVehicle(),
+                accService.getSensors().getCurrentWeatherCondition(),
+                accService.getSensors().getCurrentTemperature(),
+                accService.getSensors().getCurrentWindSpeed(),
+                accService.getSensors().getCity(),
+                accService.getSensors().getCurrentWeatherIcon()
+        );
+    }
+
+    @GetMapping("/rain") // Neuer Endpunkt für Rain-Knopf
+    public SimulationData toggleRain(@RequestParam boolean rain) {
+        accService.toggleRain(rain);
         return new SimulationData(
                 accService.getEgoSpeed(),
                 accService.getSensors().getSpeedOfLeadVehicle(),
