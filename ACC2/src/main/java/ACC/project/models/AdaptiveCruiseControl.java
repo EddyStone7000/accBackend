@@ -14,6 +14,10 @@ public class AdaptiveCruiseControl {
     public void update(float speed, float distance) {
         this.currentSpeed = speed;
         this.currentDistance = distance;
+        // Bei jedem Update sicherstellen, dass der PID-Regler sauber startet
+        if (Math.abs(desiredDistance - distance) < 0.5f) { // Toleranz von 0.5m
+            pidController.reset();
+        }
     }
 
     public float calculateControlSignal() {
@@ -21,9 +25,7 @@ public class AdaptiveCruiseControl {
         return pidController.calculateControl(error);
     }
 
-    // Getter und Setter
     public float getDesiredDistance() {
-
         return desiredDistance;
     }
 

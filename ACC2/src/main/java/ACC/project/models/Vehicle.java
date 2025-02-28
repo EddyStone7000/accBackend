@@ -2,7 +2,10 @@ package ACC.project.models;
 
 public class Vehicle {
     private float speed;
-    private float acceleration;
+
+    public Vehicle() {
+        this.speed = 0.0f;
+    }
 
     public void accelerate(float amount) {
         this.speed += amount;
@@ -12,7 +15,6 @@ public class Vehicle {
         this.speed = Math.max(0, this.speed - amount);
     }
 
-    // Getter und Setter
     public float getSpeed() {
         return speed;
     }
