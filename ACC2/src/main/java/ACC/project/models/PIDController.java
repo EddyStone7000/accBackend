@@ -28,6 +28,22 @@ public class PIDController {
         previousError = 0.0f; // Vorheriger Fehler zurücksetzen
     }
 
-    public float getKp() { return Kp; }
-    public void setKp(float kp) { Kp = kp; }
+    public float getKp() {
+        return Kp;
+    }
+    public void setKp(float kp) {
+        Kp = kp;
+    }
+
+    public void setKi(float v) {
+    }
+
+    public void setKd(float v) {
+    }
+
+    public void setOutputLimits(float v, float v1) {
+    }
+
+    public void setSetpoint(float targetDistance) {
+    }
 }

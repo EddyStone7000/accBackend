@@ -8,7 +8,7 @@ import org.springframework.web.client.RestTemplate;
 public class Sensors {
     private float leadVehicleSpeed = 120.0f;
     private float leadVehiclePosition = 20.0f;
-    private float egoVehiclePosition = 15.0f;
+    private float egoVehiclePosition = 14.0f;
     private boolean isBraking = false;
     private float brakingTime = 0.0f;
     private boolean isWeatherActive = false;

@@ -1,5 +1,6 @@
 package ACC.project.controllers;
 
+import ACC.project.config.SimulationWebSocketHandler;
 import ACC.project.services.AdaptiveCruiseControlService;
 import ACC.project.services.AdaptiveCruiseControlService.AdjustmentResult;
 import ACC.project.services.Sensors;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:4200")
@@ -19,9 +21,12 @@ public class AdaptiveCruiseControlController {
     @Autowired
     private Sensors sensors;
 
+    @Autowired
+    private SimulationWebSocketHandler webSocketHandler;
+
     @GetMapping("/run")
-    public SimulationData runControlLoop(@RequestParam(defaultValue = "0.1") float deltaTime) {
-        accService.runControlLoop(deltaTime);
+    public SimulationData startSimulation() {
+        accService.startSimulation(webSocketHandler); // Übergib den Handler
         return new SimulationData(
                 accService.getEgoSpeed(),
                 accService.getSensors().getSpeedOfLeadVehicle(),
@@ -41,7 +46,7 @@ public class AdaptiveCruiseControlController {
 
     @GetMapping("/stop")
     public SimulationData stopAndReset() {
-        accService.reset();
+        accService.stopSimulation();
         return new SimulationData(
                 accService.getEgoSpeed(),
                 accService.getSensors().getSpeedOfLeadVehicle(),
@@ -57,9 +62,6 @@ public class AdaptiveCruiseControlController {
     @GetMapping("/brake")
     public SimulationData triggerStrongBraking() {
         sensors.triggerStrongBraking();
-        for (int i = 0; i < 10; i++) {
-            accService.runControlLoop(0.1f);
-        }
         return new SimulationData(
                 accService.getEgoSpeed(),
                 accService.getSensors().getSpeedOfLeadVehicle(),
@@ -74,7 +76,7 @@ public class AdaptiveCruiseControlController {
 
     @GetMapping("/weatherToggle")
     public SimulationData toggleWeather(@RequestParam boolean active) {
-        sensors.toggleWeather(active);
+        accService.toggleWeather(active);
         return new SimulationData(
                 accService.getEgoSpeed(),
                 accService.getSensors().getSpeedOfLeadVehicle(),
@@ -87,7 +89,7 @@ public class AdaptiveCruiseControlController {
         );
     }
 
-    @GetMapping("/rain") // Neuer Endpunkt für Rain-Knopf
+    @GetMapping("/rain")
     public SimulationData toggleRain(@RequestParam boolean rain) {
         accService.toggleRain(rain);
         return new SimulationData(
