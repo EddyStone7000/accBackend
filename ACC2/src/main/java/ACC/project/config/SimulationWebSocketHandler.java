@@ -1,6 +1,6 @@
 package ACC.project.config;
 
-import ACC.project.controllers.AdaptiveCruiseControlController;
+import ACC.project.models.SimulationData; // Importiere die Models-Version
 import ACC.project.services.AdaptiveCruiseControlService;
 import ACC.project.services.Sensors;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,12 +23,10 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
     private AdaptiveCruiseControlService accService;
 
     @Autowired
-    private Sensors sensors;
+    private Sensors sensors; // Kann später entfernt werden, wenn nicht mehr direkt benötigt
 
     private final Set<WebSocketSession> sessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -43,13 +41,10 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
         System.out.println("WebSocket-Verbindung geschlossen: " + session.getId());
     }
 
-
-
     public void broadcastSimulationData() {
         if (sessions.isEmpty()) {
             System.out.println("Keine WebSocket-Clients verbunden");
         } else {
-
             for (WebSocketSession session : sessions) {
                 if (session.isOpen()) {
                     try {
@@ -64,16 +59,8 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
 
     private void sendSimulationData(WebSocketSession session) throws IOException {
         try {
-            AdaptiveCruiseControlController.SimulationData data = new AdaptiveCruiseControlController.SimulationData(
-                    accService.getEgoSpeed(),
-                    sensors.getSpeedOfLeadVehicle(),
-                    sensors.getDistanceToVehicle(),
-                    sensors.getCurrentWeatherCondition(),
-                    sensors.getCurrentTemperature(),
-                    sensors.getCurrentWindSpeed(),
-                    sensors.getCity(),
-                    sensors.getCurrentWeatherIcon()
-            );
+            // Verwende die getSimulationData()-Methode aus dem Service
+            SimulationData data = accService.getSimulationData();
             if (data == null) {
                 System.err.println("SimulationData ist null!");
                 session.sendMessage(new TextMessage("{\"status\":\"Fehler: Keine Daten verfügbar\"}"));
@@ -85,7 +72,6 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
                 session.sendMessage(new TextMessage("{\"status\":\"Fehler: Leere Daten\"}"));
                 return;
             }
-
             session.sendMessage(new TextMessage(jsonData));
         } catch (Exception e) {
             System.err.println("Fehler beim Senden der WebSocket-Daten: " + e.getMessage());

@@ -2,6 +2,7 @@ package ACC.project.services;
 
 import ACC.project.config.SimulationWebSocketHandler;
 import ACC.project.models.PIDController;
+import ACC.project.models.SimulationData;
 import ACC.project.models.Vehicle;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,51 +26,63 @@ public class AdaptiveCruiseControlService {
     private Thread simulationThread;
     private final ReentrantLock lock = new ReentrantLock();
 
-    // PID-Regler für Abstandssteuerung
     private final PIDController pidController;
 
-    // Standard-Konstruktor für Spring (Autowired)
     public AdaptiveCruiseControlService() {
-        this(new Vehicle(), new Sensors(), new Actuators()); // Default-Initialisierung
+        this(new Vehicle(), new Sensors(), new Actuators());
     }
 
-    // Parametrierter Konstruktor für manuelle Initialisierung oder Tests
     public AdaptiveCruiseControlService(Vehicle egoVehicle, Sensors sensors, Actuators actuators) {
         this.egoVehicle = egoVehicle;
         this.sensors = sensors;
         this.actuators = actuators;
-        // Zielabstand als Setpoint (6m normal, wird bei Regen angepasst)
         this.pidController = new PIDController(6.0f);
-        // Optimierte Parameter
-        this.pidController.setKp(3.0f);  // Weniger aggressiv für präzisere Regulierung
-        this.pidController.setKi(0.05f); // Weniger Integralanteil, um Überschwingen zu vermeiden
-        this.pidController.setKd(2.0f);  // Dämpfung von Schwankungen
-        this.pidController.setOutputLimits(-50.0f, 50.0f); // Größere Reichweite für zügige Beschleunigung
+        this.pidController.setKp(3.0f);
+        this.pidController.setKi(0.05f);
+        this.pidController.setKd(2.0f);
+        this.pidController.setOutputLimits(-50.0f, 50.0f);
     }
 
-    public void startSimulation(SimulationWebSocketHandler webSocketHandler) {
-        if (!isRunning) {
-            isRunning = true;
-            egoVehicle.setSpeed(100.0f); // Starte mit 100 km/h
+    // Neue Methode zum Starten der Simulation mit spezifischen Werten
+    public void startSimulation(SimulationWebSocketHandler webSocketHandler, float leadSpeed, float distance, float egoSpeed) {
+        lock.lock();
+        try {
+            // Setze die Werte vor dem Start
+            sensors.setLeadVehicleSpeed(leadSpeed);
+            sensors.setDistance(distance);
+            egoVehicle.setSpeed(egoSpeed);
 
-            simulationThread = new Thread(() -> {
-                while (isRunning) {
-                    lock.lock();
-                    try {
-                        runControlLoop(0.1f, webSocketHandler);
-                    } finally {
-                        lock.unlock();
+            if (!isRunning) {
+                isRunning = true;
+                simulationThread = new Thread(() -> {
+                    while (isRunning) {
+                        lock.lock();
+                        try {
+                            runControlLoop(0.1f, webSocketHandler);
+                        } finally {
+                            lock.unlock();
+                        }
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            });
-            simulationThread.start();
+                });
+                simulationThread.start();
+                System.out.println("Simulation gestartet mit leadSpeed=" + leadSpeed + ", distance=" + distance + ", egoSpeed=" + egoSpeed);
+            } else {
+                System.out.println("Simulation läuft bereits, Werte aktualisiert: leadSpeed=" + leadSpeed + ", distance=" + distance + ", egoSpeed=" + egoSpeed);
+            }
+        } finally {
+            lock.unlock();
         }
+    }
+
+    // Überladene Methode ohne spezifische Werte (für Standardfall)
+    public void startSimulation(SimulationWebSocketHandler webSocketHandler) {
+        startSimulation(webSocketHandler, sensors.getSpeedOfLeadVehicle(), sensors.getDistanceToVehicle(), egoVehicle.getSpeed());
     }
 
     public void stopSimulation() {
@@ -94,7 +107,84 @@ public class AdaptiveCruiseControlService {
             distanceStrategy = new NormalDistanceStrategy();
             actuators.applyThrottle(0.0f);
             actuators.applyBrakes(0.0f);
-            pidController.reset(); // PID zurücksetzen
+            pidController.reset();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void adjustSpeedContinuously(float deltaTime) {
+        float distance = sensors.getDistanceToVehicle();
+        float egoSpeed = egoVehicle.getSpeed();
+        float leadVehicleSpeed = sensors.getSpeedOfLeadVehicle();
+
+        if (distance < 0) {
+            System.err.println("Ungültiger Abstand: " + distance);
+            distance = 0;
+        }
+
+        float targetDistance = isRainSimulation ? 10.0f : 6.0f;
+        pidController.setSetpoint(targetDistance);
+
+        if (distance < 3.0f || (egoSpeed > leadVehicleSpeed && distance < targetDistance)) {
+            float emergencyBrake = Math.max(50.0f * deltaTime, (egoSpeed - leadVehicleSpeed) * 2.0f);
+            System.out.println("Notbremsung! Abstand: " + distance + ", Bremsen mit Wert: " + emergencyBrake);
+            egoVehicle.brake(emergencyBrake);
+            actuators.applyBrakes(50.0f);
+            pidController.reset();
+            return;
+        }
+
+        float error = targetDistance - distance;
+        float controlFactor = pidController.calculateControl(error);
+
+        float speedDifference = leadVehicleSpeed - egoSpeed;
+        if (controlFactor < 0 && speedDifference < 5.0f && distance < targetDistance + 2.0f) {
+            controlFactor = Math.max(controlFactor, -speedDifference * 5.0f);
+        }
+
+        if (controlFactor > 0) {
+            float brake = controlFactor * deltaTime;
+            System.out.println("Bremsen betätigt mit Wert: " + brake);
+            egoVehicle.brake(brake);
+            actuators.applyBrakes(controlFactor);
+        } else if (controlFactor < 0) {
+            float throttle = Math.abs(controlFactor) * deltaTime;
+            System.out.println("Gaspedal betätigt mit Wert: " + throttle);
+            egoVehicle.accelerate(throttle);
+            actuators.applyThrottle(Math.abs(controlFactor));
+        }
+    }
+
+    public AdjustmentResult startAdjusting() {
+        lock.lock();
+        try {
+            isAdjusting = true;
+            float distance = sensors.getDistanceToVehicle();
+            float leadSpeed = sensors.getSpeedOfLeadVehicle();
+            float egoSpeed = egoVehicle.getSpeed();
+            System.out.println("startAdjusting: distance=" + distance + ", leadSpeed=" + leadSpeed + ", egoSpeed=" + egoSpeed);
+
+            if (isRunning) {
+                float targetDistance = isRainSimulation ? 10.0f : 6.0f;
+                float error = targetDistance - distance;
+                float controlFactor = pidController.calculateControl(error);
+
+                if (controlFactor > 0) {
+                    egoVehicle.brake(controlFactor * 0.1f);
+                    actuators.applyBrakes(controlFactor);
+                    System.out.println("Bremsen: controlFactor=" + controlFactor);
+                    return new AdjustmentResult(egoVehicle.getSpeed(), leadSpeed, distance, "Bremsen betätigt");
+                } else if (controlFactor < 0) {
+                    egoVehicle.accelerate(Math.abs(controlFactor) * 0.1f);
+                    actuators.applyThrottle(Math.abs(controlFactor));
+                    System.out.println("Beschleunigen: controlFactor=" + controlFactor);
+                    return new AdjustmentResult(egoVehicle.getSpeed(), leadSpeed, distance, "Gas betätigt");
+                }
+            }
+            String action = distance < 6.0f ? "Bremsen betätigt" :
+                    distance > 8.0f ? "Gas betätigt" : "Abstand stabil gehalten";
+            return new AdjustmentResult(egoSpeed, leadSpeed, distance, action);
         } finally {
             lock.unlock();
         }
@@ -109,75 +199,10 @@ public class AdaptiveCruiseControlService {
 
         if (isAdjusting) {
             adjustSpeedContinuously(deltaTime);
+            System.out.println("Kontinuierliche Anpassung: egoSpeed=" + egoSpeed + ", distance=" + distance);
         }
         if (webSocketHandler != null) {
-            webSocketHandler.broadcastSimulationData(); // Nur broadcasten, wenn Handler vorhanden
-
-        }
-    }
-
-    private void adjustSpeedContinuously(float deltaTime) {
-        float distance = sensors.getDistanceToVehicle();
-        float egoSpeed = egoVehicle.getSpeed();
-        float leadVehicleSpeed = sensors.getSpeedOfLeadVehicle();
-
-        if (distance < 0) {
-            System.err.println("Ungültiger Abstand: " + distance);
-            distance = 0;
-        }
-
-        // Zielabstand anpassen (6m normal, 10m bei Regen)
-        float targetDistance = isRainSimulation ? 10.0f : 6.0f;
-        pidController.setSetpoint(targetDistance);
-
-        // Sicherheitsgrenze: Stark bremsen, wenn Abstand < 4 Meter oder Geschwindigkeit zu hoch
-        if (distance < 3.0f || (egoSpeed > leadVehicleSpeed && distance < targetDistance)) {
-            float emergencyBrake = Math.max(50.0f * deltaTime, (egoSpeed - leadVehicleSpeed) * 2.0f);
-            System.out.println("Notbremsung! Abstand: " + distance + ", Bremsen mit Wert: " + emergencyBrake);
-            egoVehicle.brake(emergencyBrake);
-            actuators.applyBrakes(50.0f);
-            pidController.reset(); // PID zurücksetzen
-            return;
-        }
-
-        // Fehler berechnen (setpoint - aktueller Wert)
-        float error = targetDistance - distance;
-        float controlFactor = pidController.calculateControl(error);
-
-        // Begrenze Beschleunigung, um Überholen zu vermeiden
-        float speedDifference = leadVehicleSpeed - egoSpeed;
-        if (controlFactor < 0 && speedDifference < 5.0f && distance < targetDistance + 2.0f) {
-            controlFactor = Math.max(controlFactor, -speedDifference * 5.0f); // Nur nahe am Ziel dämpfen
-        }
-
-
-
-        if (controlFactor > 0) {
-            // Abstand zu klein -> Bremsen
-            float brake = controlFactor * deltaTime;
-            System.out.println("Bremsen betätigt mit Wert: " + brake);
-            egoVehicle.brake(brake);
-            actuators.applyBrakes(controlFactor);
-        } else if (controlFactor < 0) {
-            // Abstand zu groß -> Beschleunigen (mit Begrenzung)
-            float throttle = Math.abs(controlFactor) * deltaTime;
-            System.out.println("Gaspedal betätigt mit Wert: " + throttle);
-            egoVehicle.accelerate(throttle);
-            actuators.applyThrottle(Math.abs(controlFactor));
-        }
-    }
-    public AdjustmentResult startAdjusting() {
-        lock.lock();
-        try {
-            isAdjusting = true;
-            float distance = sensors.getDistanceToVehicle();
-            float leadSpeed = sensors.getSpeedOfLeadVehicle();
-            float egoSpeed = egoVehicle.getSpeed();
-            String action = distance < 6.0f ? "Bremsen betätigt" :
-                    distance > 8.0f ? "Gas betätigt" : "Abstand stabil gehalten";
-            return new AdjustmentResult(egoSpeed, leadSpeed, distance, action);
-        } finally {
-            lock.unlock();
+            webSocketHandler.broadcastSimulationData();
         }
     }
 
@@ -216,6 +241,10 @@ public class AdaptiveCruiseControlService {
         return sensors;
     }
 
+    public Vehicle getEgoVehicle() {
+        return egoVehicle;
+    }
+
     public void setDistanceStrategy(DistanceStrategy strategy) {
         lock.lock();
         try {
@@ -223,6 +252,20 @@ public class AdaptiveCruiseControlService {
         } finally {
             lock.unlock();
         }
+    }
+
+    // Neue Getter-Methode für aktuelle Simulationsdaten
+    public SimulationData getSimulationData() {
+        SimulationData data = new SimulationData();
+        data.setEgoSpeed(egoVehicle.getSpeed());
+        data.setLeadSpeed(sensors.getSpeedOfLeadVehicle());
+        data.setDistance(sensors.getDistanceToVehicle());
+        data.setWeatherCondition(sensors.getCurrentWeatherCondition());
+        data.setTemperature(sensors.getCurrentTemperature());
+        data.setWindSpeed(sensors.getCurrentWindSpeed());
+        data.setCity(sensors.getCity());
+        data.setWeatherIcon(sensors.getCurrentWeatherIcon());
+        return data;
     }
 
     public static class AdjustmentResult {

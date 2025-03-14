@@ -1,8 +1,11 @@
 package ACC.project.services;
 
 import ACC.project.models.WeatherResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+
+
 
 @Service
 public class Sensors {
@@ -21,6 +24,10 @@ public class Sensors {
 
     private final String apiKey = "004067d4df5b700de4f787838046047f";
     private final RestTemplate restTemplate = new RestTemplate();
+
+
+
+
 
     public void updateSimulation(float egoSpeed, float deltaTime) {
         if (isBraking) {
@@ -53,24 +60,29 @@ public class Sensors {
         }
     }
 
+    // Neue Methode zum Setzen von leadVehicleSpeed
+    public void setLeadVehicleSpeed(float speed) {
+        this.leadVehicleSpeed = speed;
+    }
+
     public void triggerStrongBraking() {
         isBraking = true;
         brakingTime = 0.0f;
     }
 
     public void reset() {
-        leadVehicleSpeed = 120.0f;            // Setzt leadSpeed zurück
-        leadVehiclePosition = 20.0f;          // Setzt leadVehiclePosition zurück
-        egoVehiclePosition = 15.0f;           // Setzt egoVehiclePosition zurück
-        isBraking = false;                    // Deaktiviert Bremsen
-        brakingTime = 0.0f;                   // Setzt Bremszeit zurück
-        isRecovering = false;                 // Deaktiviert Erholung
-        isWeatherActive = false;              // Deaktiviert Wetter
-        currentWeatherCondition = "Clear";    // Setzt Wetter zurück
-        currentTemperature = 0.0f;            // Setzt Temperatur zurück
-        currentWindSpeed = 0.0f;              // Setzt Windgeschwindigkeit zurück
-        city = "Berlin";                      // Setzt Stadt zurück
-        currentWeatherIcon = "01d";           // Setzt Wetter-Icon zurück
+        leadVehicleSpeed = 120.0f;
+        leadVehiclePosition = 20.0f;
+        egoVehiclePosition = 15.0f;
+        isBraking = false;
+        brakingTime = 0.0f;
+        isRecovering = false;
+        isWeatherActive = false;
+        currentWeatherCondition = "Clear";
+        currentTemperature = 0.0f;
+        currentWindSpeed = 0.0f;
+        city = "Berlin";
+        currentWeatherIcon = "01d";
     }
 
     public void toggleWeather(boolean active) {
@@ -110,7 +122,7 @@ public class Sensors {
     }
 
     public String getCurrentWeatherIcon() {
-        return currentWeatherIcon;
+        return null;
     }
 
     private void updateWeatherData() {
@@ -133,4 +145,10 @@ public class Sensors {
             currentWeatherIcon = "01d";
         }
     }
+
+    public void setDistance(float distance) {
+        this.leadVehiclePosition = this.egoVehiclePosition + distance;
+    }
+
+
 }
