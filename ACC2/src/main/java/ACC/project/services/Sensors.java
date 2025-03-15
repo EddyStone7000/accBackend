@@ -122,7 +122,7 @@ public class Sensors {
     }
 
     public String getCurrentWeatherIcon() {
-        return null;
+        return currentWeatherIcon;
     }
 
     private void updateWeatherData() {
