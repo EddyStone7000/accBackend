@@ -21,7 +21,7 @@ public class AdaptiveCruiseControlController {
     @Autowired
     private SimulationWebSocketHandler webSocketHandler;
 
-    // Entferne: @Autowired private SimulationData simulationService; (SimulationData ist kein Service)
+    // webSocketHandler ... Excel
 
     @PostMapping("/run")
     public SimulationData runSimulation(@RequestBody SimulationData simulationData) {
