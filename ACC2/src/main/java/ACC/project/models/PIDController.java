@@ -1,13 +1,13 @@
 package ACC.project.models;
 
 public class PIDController {
-    private float Kp = 0.5f;
-    private float Ki = 0.01f;
-    private float Kd = 0.02f;
+    private float Kp = 0.5f; //wie stark der Regler auf den aktuellen Fehler. Schwingungsgefahr zB 1.0f reagiert
+    private float Ki = 0.01f; //korrigiert langfristige Abweichungen
+    private float Kd = 0.02f; //(z. B. Kd = 0.1f): Der Regler dämpft Schwingungen, zu hoher Wert kann die Reaktion verlangsamen
     private float setpoint;
-    private float integral = 0.0f;
-    private float previousError = 0.0f;
-    private float maxOutput = 50.0f;
+    private float integral = 0.0f; //um langfristige Abweichungen zu korrigieren.
+    private float previousError = 0.0f; //Dämpfung
+    private float maxOutput = 50.0f; //stärkeres Bremsen oder Beschleunigen
     private float minOutput = -50.0f;
 
     public PIDController(float setpoint) {
